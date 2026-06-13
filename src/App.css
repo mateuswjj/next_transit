@@ -92,6 +92,80 @@
   background: color-mix(in srgb, var(--surface) 82%, transparent);
 }
 
+.fleet-panel {
+  padding: 24px;
+  border-style: solid;
+}
+
+.fleet-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.fleet-panel__title {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 1.8rem;
+}
+
+.fleet-panel__subtitle {
+  margin: 6px 0 0;
+  color: var(--text);
+}
+
+.fleet-panel__state {
+  margin: 0;
+  padding: 18px 20px;
+  border-radius: 18px;
+  background: var(--surface);
+  color: var(--text-strong);
+}
+
+.fleet-panel__state--error {
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  color: #b91c1c;
+}
+
+.fleet-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+}
+
+.fleet-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 980px;
+}
+
+.fleet-table th,
+.fleet-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.fleet-table th {
+  color: var(--text-strong);
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: color-mix(in srgb, var(--surface-strong) 60%, transparent);
+}
+
+.fleet-table td {
+  color: var(--text);
+}
+
+.fleet-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
 @media (max-width: 640px) {
   .topbar {
     padding: 16px;
@@ -119,5 +193,13 @@
   .dashboard-panel {
     min-height: calc(100svh - 153px);
     border-radius: 20px;
+  }
+
+  .fleet-panel {
+    padding: 16px;
+  }
+
+  .fleet-panel__title {
+    font-size: 1.45rem;
   }
 }
