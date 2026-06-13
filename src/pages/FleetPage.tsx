@@ -1,52 +1,100 @@
-import type { FormEvent, ReactNode } from 'react'
+import type { FormEvent } from 'react'
 import { useEffect, useState } from 'react'
 import {
   Alert,
   Box,
   Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  FormControlLabel,
   Paper,
   Stack,
-  Switch,
+  Snackbar,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  TextField,
   Typography,
 } from '@mui/material'
+import AddVehicleModal from './fleet/modals/AddVehicleModal'
+import EditVehicleModal from './fleet/modals/EditVehicleModal'
+import ViewVehicleModal from './fleet/modals/ViewVehicleModal'
+import type { Vehicle, VehicleFormErrors, VehicleFormState } from './fleet/types'
 
-type Vehicle = {
-  id: number
-  name: string
-  plate: string
-  external_id: string
-  is_active: boolean
-  status: string
-  current_position: string | Record<string, unknown> | null
-  speed: number | string
-  heading: string
-  last_seen_at: string | null
-}
-
-type VehicleFormState = {
-  name: string
-  plate: string
-  external_id: string
-  is_active: boolean
-  status: string
-  speed: string
-  heading: string
-  current_position: string
+type ToastState = {
+  open: boolean
+  message: string
+  severity: 'success' | 'error' | 'info'
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
+const VALID_STATUSES = new Set(['active', 'inactive', 'maintenance'])
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function normalizeApiErrorMessage(errorData: unknown) {
+  if (typeof errorData === 'string') {
+    return errorData
+  }
+
+  if (Array.isArray(errorData)) {
+    return errorData.map((item) => String(item)).join(' ')
+  }
+
+  if (isRecord(errorData)) {
+    if (typeof errorData.error === 'string') {
+      return errorData.error
+    }
+
+    const entries = Object.entries(errorData).flatMap(([field, value]) => {
+      if (Array.isArray(value)) {
+        return value.map((item) => `${field}: ${String(item)}`)
+      }
+
+      if (typeof value === 'string') {
+        return [`${field}: ${value}`]
+      }
+
+      return []
+    })
+
+    if (entries.length > 0) {
+      return entries.join(' ')
+    }
+  }
+
+  return 'The request failed.'
+}
+
+function mapApiErrorsToForm(errorData: unknown): VehicleFormErrors {
+  if (!isRecord(errorData)) {
+    return {}
+  }
+
+  const fieldNames: Array<keyof VehicleFormState> = [
+    'name',
+    'plate',
+    'external_id',
+    'is_active',
+    'status',
+    'speed',
+    'heading',
+    'current_position',
+  ]
+
+  return fieldNames.reduce<VehicleFormErrors>((acc, field) => {
+    const value = errorData[field]
+
+    if (Array.isArray(value) && value.length > 0) {
+      acc[field] = String(value[0])
+    } else if (typeof value === 'string') {
+      acc[field] = value
+    }
+
+    return acc
+  }, {})
+}
 
 function formatPosition(position: Vehicle['current_position']) {
   if (!position) {
@@ -108,110 +156,61 @@ function createEditForm(vehicle: Vehicle): VehicleFormState {
   }
 }
 
-function DetailItem({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
-      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-        {label}
-      </Typography>
-      <Typography variant="body1">{value}</Typography>
-    </Paper>
-  )
+function validateVehicleForm(
+  form: VehicleFormState,
+  options: { includeCurrentPosition: boolean },
+): VehicleFormErrors {
+  const errors: VehicleFormErrors = {}
+
+  if (!form.name.trim()) {
+    errors.name = 'Name is required.'
+  } else if (form.name.trim().length > 255) {
+    errors.name = 'Name must be at most 255 characters.'
+  }
+
+  if (!form.plate.trim()) {
+    errors.plate = 'Plate is required.'
+  } else if (form.plate.trim().length > 20) {
+    errors.plate = 'Plate must be at most 20 characters.'
+  }
+
+  if (!form.external_id.trim()) {
+    errors.external_id = 'External ID is required.'
+  } else if (form.external_id.trim().length > 100) {
+    errors.external_id = 'External ID must be at most 100 characters.'
+  }
+
+  if (!form.status.trim()) {
+    errors.status = 'Status is required.'
+  } else if (!VALID_STATUSES.has(form.status.trim().toLowerCase())) {
+    errors.status = 'Status must be active, inactive, or maintenance.'
+  }
+
+  if (!form.speed.trim()) {
+    errors.speed = 'Speed is required.'
+  } else if (!/^-?\d+(\.\d{1,2})?$/.test(form.speed.trim())) {
+    errors.speed = 'Speed must be a valid number with up to 2 decimals.'
+  }
+
+  if (!form.heading.trim()) {
+    errors.heading = 'Heading is required.'
+  } else if (form.heading.trim().length > 255) {
+    errors.heading = 'Heading must be at most 255 characters.'
+  }
+
+  if (options.includeCurrentPosition && !form.current_position.trim()) {
+    errors.current_position = 'Current position is required for editing.'
+  }
+
+  return errors
 }
 
-type VehicleFormProps = {
-  form: VehicleFormState
-  onChange: (field: keyof VehicleFormState, value: string | boolean) => void
-  includeCurrentPosition: boolean
-  submitLabel: string
-  isSaving: boolean
-  onCancel: () => void
-}
-
-function VehicleForm({
-  form,
-  onChange,
-  includeCurrentPosition,
-  submitLabel,
-  isSaving,
-  onCancel,
-}: VehicleFormProps) {
-  return (
-    <Box component="form" onSubmit={(event) => event.preventDefault()}>
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-          gap: 2,
-          pt: 1,
-        }}
-      >
-        <TextField
-          label="Name"
-          value={form.name}
-          onChange={(event) => onChange('name', event.target.value)}
-          fullWidth
-        />
-        <TextField
-          label="Plate"
-          value={form.plate}
-          onChange={(event) => onChange('plate', event.target.value)}
-          fullWidth
-        />
-        <TextField
-          label="External ID"
-          value={form.external_id}
-          onChange={(event) => onChange('external_id', event.target.value)}
-          fullWidth
-        />
-        <TextField
-          label="Status"
-          value={form.status}
-          onChange={(event) => onChange('status', event.target.value)}
-          fullWidth
-        />
-        <TextField
-          label="Speed"
-          value={form.speed}
-          onChange={(event) => onChange('speed', event.target.value)}
-          fullWidth
-        />
-        <TextField
-          label="Heading"
-          value={form.heading}
-          onChange={(event) => onChange('heading', event.target.value)}
-          fullWidth
-        />
-        {includeCurrentPosition ? (
-          <TextField
-            label="Current Position"
-            value={form.current_position}
-            onChange={(event) => onChange('current_position', event.target.value)}
-            fullWidth
-            sx={{ gridColumn: { md: '1 / -1' } }}
-          />
-        ) : null}
-        <FormControlLabel
-          control={
-            <Switch
-              checked={form.is_active}
-              onChange={(event) => onChange('is_active', event.target.checked)}
-            />
-          }
-          label="Active"
-          sx={{ gridColumn: { md: '1 / -1' } }}
-        />
-      </Box>
-      <DialogActions sx={{ px: 0, pt: 3 }}>
-        <Button onClick={onCancel} color="inherit">
-          Cancel
-        </Button>
-        <Button type="submit" variant="contained" disabled={isSaving}>
-          {isSaving ? 'Saving...' : submitLabel}
-        </Button>
-      </DialogActions>
-    </Box>
-  )
+function validateVehicleField(
+  field: keyof VehicleFormState,
+  form: VehicleFormState,
+  options: { includeCurrentPosition: boolean },
+) {
+  return validateVehicleForm(form, options)[field]
 }
 
 function FleetPage() {
@@ -223,9 +222,14 @@ function FleetPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [vehicleForm, setVehicleForm] = useState<VehicleFormState | null>(null)
-  const [actionMessage, setActionMessage] = useState<string | null>(null)
+  const [formErrors, setFormErrors] = useState<VehicleFormErrors>({})
   const [isDeletingId, setIsDeletingId] = useState<number | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [toast, setToast] = useState<ToastState>({
+    open: false,
+    message: '',
+    severity: 'info',
+  })
 
   useEffect(() => {
     let isMounted = true
@@ -269,27 +273,61 @@ function FleetPage() {
   }, [])
 
   function updateFormField(field: keyof VehicleFormState, value: string | boolean) {
-    setVehicleForm((current) => (current ? { ...current, [field]: value } : current))
+    const includeCurrentPosition = isEditModalOpen
+
+    setVehicleForm((current) => {
+      if (!current) {
+        return current
+      }
+
+      const nextForm = { ...current, [field]: value }
+      const nextError = validateVehicleField(field, nextForm, { includeCurrentPosition })
+
+      setFormErrors((currentErrors) => {
+        if (!nextError && !currentErrors[field]) {
+          return currentErrors
+        }
+
+        const nextErrors = { ...currentErrors }
+
+        if (nextError) {
+          nextErrors[field] = nextError
+          return nextErrors
+        }
+
+        delete nextErrors[field]
+        return nextErrors
+      })
+
+      return nextForm
+    })
+  }
+
+  function openToast(message: string, severity: ToastState['severity']) {
+    setToast({
+      open: true,
+      message,
+      severity,
+    })
   }
 
   function openViewModal(vehicle: Vehicle) {
     setSelectedVehicle(vehicle)
     setIsViewModalOpen(true)
-    setActionMessage(null)
   }
 
   function openAddModal() {
     setSelectedVehicle(null)
     setVehicleForm(createEmptyForm())
+    setFormErrors({})
     setIsAddModalOpen(true)
-    setActionMessage(null)
   }
 
   function openEditModal(vehicle: Vehicle) {
     setSelectedVehicle(vehicle)
     setVehicleForm(createEditForm(vehicle))
+    setFormErrors({})
     setIsEditModalOpen(true)
-    setActionMessage(null)
   }
 
   function closeModals() {
@@ -298,7 +336,7 @@ function FleetPage() {
     setIsEditModalOpen(false)
     setSelectedVehicle(null)
     setVehicleForm(null)
-    setActionMessage(null)
+    setFormErrors({})
   }
 
   async function handleDelete(vehicle: Vehicle) {
@@ -309,7 +347,6 @@ function FleetPage() {
     }
 
     try {
-      setActionMessage(null)
       setIsDeletingId(vehicle.id)
 
       const response = await fetch(`${API_BASE_URL}/vehicle/${vehicle.id}`, {
@@ -323,9 +360,11 @@ function FleetPage() {
       setVehicles((currentVehicles) =>
         currentVehicles.filter((currentVehicle) => currentVehicle.id !== vehicle.id),
       )
+      openToast(`Vehicle "${vehicle.name}" deleted successfully.`, 'success')
     } catch (deleteError) {
-      setActionMessage(
+      openToast(
         deleteError instanceof Error ? deleteError.message : 'Unable to delete vehicle.',
+        'error',
       )
     } finally {
       setIsDeletingId(null)
@@ -339,9 +378,16 @@ function FleetPage() {
       return
     }
 
+    const nextErrors = validateVehicleForm(vehicleForm, { includeCurrentPosition: false })
+
+    if (Object.keys(nextErrors).length > 0) {
+      setFormErrors(nextErrors)
+      return
+    }
+
     try {
-      setActionMessage(null)
       setIsSaving(true)
+      setFormErrors({})
 
       const response = await fetch(`${API_BASE_URL}/vehicles/`, {
         method: 'POST',
@@ -360,17 +406,20 @@ function FleetPage() {
       })
 
       if (!response.ok) {
-        throw new Error(`Create failed with status ${response.status}`)
+        const errorData: unknown = await response.json().catch(() => null)
+        setFormErrors(mapApiErrorsToForm(errorData))
+        throw new Error(normalizeApiErrorMessage(errorData) || `Create failed with status ${response.status}`)
       }
 
       const createdVehicle: Vehicle = await response.json()
 
       setVehicles((currentVehicles) => [createdVehicle, ...currentVehicles])
       closeModals()
-      setActionMessage(`Vehicle "${createdVehicle.name}" created successfully.`)
+      openToast(`Vehicle "${createdVehicle.name}" created successfully.`, 'success')
     } catch (createError) {
-      setActionMessage(
+      openToast(
         createError instanceof Error ? createError.message : 'Unable to create vehicle.',
+        'error',
       )
     } finally {
       setIsSaving(false)
@@ -384,9 +433,16 @@ function FleetPage() {
       return
     }
 
+    const nextErrors = validateVehicleForm(vehicleForm, { includeCurrentPosition: true })
+
+    if (Object.keys(nextErrors).length > 0) {
+      setFormErrors(nextErrors)
+      return
+    }
+
     try {
-      setActionMessage(null)
       setIsSaving(true)
+      setFormErrors({})
 
       const response = await fetch(`${API_BASE_URL}/vehicle/${selectedVehicle.id}`, {
         method: 'PATCH',
@@ -406,7 +462,9 @@ function FleetPage() {
       })
 
       if (!response.ok) {
-        throw new Error(`Update failed with status ${response.status}`)
+        const errorData: unknown = await response.json().catch(() => null)
+        setFormErrors(mapApiErrorsToForm(errorData))
+        throw new Error(normalizeApiErrorMessage(errorData) || `Update failed with status ${response.status}`)
       }
 
       const updatedVehicle: Vehicle = await response.json()
@@ -417,10 +475,11 @@ function FleetPage() {
         ),
       )
       closeModals()
-      setActionMessage(`Vehicle "${updatedVehicle.name}" updated successfully.`)
+      openToast(`Vehicle "${updatedVehicle.name}" updated successfully.`, 'success')
     } catch (updateError) {
-      setActionMessage(
+      openToast(
         updateError instanceof Error ? updateError.message : 'Unable to update vehicle.',
+        'error',
       )
     } finally {
       setIsSaving(false)
@@ -453,7 +512,6 @@ function FleetPage() {
 
         {isLoading ? <Alert severity="info">Loading fleet...</Alert> : null}
         {error ? <Alert severity="error">Could not load fleet data. {error}</Alert> : null}
-        {actionMessage ? <Alert severity="success">{actionMessage}</Alert> : null}
 
         {!isLoading && !error ? (
           vehicles.length > 0 ? (
@@ -521,70 +579,50 @@ function FleetPage() {
         ) : null}
       </Stack>
 
-      <Dialog open={isViewModalOpen && !!selectedVehicle} onClose={closeModals} fullWidth maxWidth="md">
-        <DialogTitle>Vehicle details</DialogTitle>
-        <DialogContent dividers>
-          {selectedVehicle ? (
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-                gap: 2,
-              }}
-            >
-              <DetailItem label="ID" value={selectedVehicle.id} />
-              <DetailItem label="Name" value={selectedVehicle.name} />
-              <DetailItem label="Plate" value={selectedVehicle.plate} />
-              <DetailItem label="External ID" value={selectedVehicle.external_id} />
-              <DetailItem label="Active" value={selectedVehicle.is_active ? 'Yes' : 'No'} />
-              <DetailItem label="Status" value={selectedVehicle.status} />
-              <DetailItem label="Position" value={formatPosition(selectedVehicle.current_position)} />
-              <DetailItem label="Speed" value={selectedVehicle.speed} />
-              <DetailItem label="Heading" value={selectedVehicle.heading} />
-              <DetailItem label="Last Seen" value={formatLastSeen(selectedVehicle.last_seen_at)} />
-            </Box>
-          ) : null}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={closeModals}>Close</Button>
-        </DialogActions>
-      </Dialog>
+      <ViewVehicleModal
+        open={isViewModalOpen && !!selectedVehicle}
+        vehicle={selectedVehicle}
+        onClose={closeModals}
+        formatPosition={formatPosition}
+        formatLastSeen={formatLastSeen}
+      />
 
-      <Dialog open={isAddModalOpen && !!vehicleForm} onClose={closeModals} fullWidth maxWidth="md">
-        <DialogTitle>Add vehicle</DialogTitle>
-        <DialogContent dividers>
-          {vehicleForm ? (
-            <Box component="form" onSubmit={handleAddSubmit}>
-              <VehicleForm
-                form={vehicleForm}
-                onChange={updateFormField}
-                includeCurrentPosition={false}
-                submitLabel="Create"
-                isSaving={isSaving}
-                onCancel={closeModals}
-              />
-            </Box>
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      <AddVehicleModal
+        open={isAddModalOpen && !!vehicleForm}
+        form={vehicleForm}
+        errors={formErrors}
+        isSaving={isSaving}
+        onClose={closeModals}
+        onSubmit={handleAddSubmit}
+        onChange={updateFormField}
+      />
 
-      <Dialog open={isEditModalOpen && !!selectedVehicle && !!vehicleForm} onClose={closeModals} fullWidth maxWidth="md">
-        <DialogTitle>Edit vehicle</DialogTitle>
-        <DialogContent dividers>
-          {vehicleForm ? (
-            <Box component="form" onSubmit={handleEditSubmit}>
-              <VehicleForm
-                form={vehicleForm}
-                onChange={updateFormField}
-                includeCurrentPosition
-                submitLabel="Save"
-                isSaving={isSaving}
-                onCancel={closeModals}
-              />
-            </Box>
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      <EditVehicleModal
+        open={isEditModalOpen && !!selectedVehicle && !!vehicleForm}
+        vehicle={selectedVehicle}
+        form={vehicleForm}
+        errors={formErrors}
+        isSaving={isSaving}
+        onClose={closeModals}
+        onSubmit={handleEditSubmit}
+        onChange={updateFormField}
+      />
+
+      <Snackbar
+        open={toast.open}
+        autoHideDuration={5000}
+        onClose={() => setToast((current) => ({ ...current, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert
+          severity={toast.severity}
+          variant="filled"
+          onClose={() => setToast((current) => ({ ...current, open: false }))}
+          sx={{ width: '100%' }}
+        >
+          {toast.message}
+        </Alert>
+      </Snackbar>
     </section>
   )
 }
