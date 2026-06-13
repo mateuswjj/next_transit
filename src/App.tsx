@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react'
+import { NavLink, Route, Routes } from 'react-router-dom'
 import './App.css'
+import FleetPage from './pages/FleetPage'
+import HomePage from './pages/HomePage'
+import MenuPage from './pages/MenuPage'
 
 type ThemeMode = 'light' | 'dark'
 
@@ -29,8 +33,22 @@ function App() {
     <div className="app-shell">
       <header className="topbar">
         <nav className="topbar__nav" aria-label="Primary">
-          <span className="topbar__item">Fleet</span>
-          <span className="topbar__item">Menu</span>
+          <NavLink
+            to="/menu"
+            className={({ isActive }) =>
+              isActive ? 'topbar__item topbar__item--active' : 'topbar__item'
+            }
+          >
+            Menu
+          </NavLink>
+          <NavLink
+            to="/fleet"
+            className={({ isActive }) =>
+              isActive ? 'topbar__item topbar__item--active' : 'topbar__item'
+            }
+          >
+            Fleet
+          </NavLink>
         </nav>
 
         <button
@@ -43,7 +61,12 @@ function App() {
       </header>
 
       <main className="dashboard-main">
-        <section className="dashboard-panel" aria-label="Dashboard" />
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/menu" element={<MenuPage />} />
+          <Route path="/fleet" element={<FleetPage />} />
+          <Route path="/fleetr" element={<FleetPage />} />
+        </Routes>
       </main>
     </div>
   )

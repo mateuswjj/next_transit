@@ -24,6 +24,9 @@
 }
 
 .topbar__item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-strong);
@@ -33,6 +36,23 @@
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  text-decoration: none;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.topbar__item:hover {
+  background: var(--surface-strong);
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+
+.topbar__item--active {
+  background: var(--text-strong);
+  border-color: var(--text-strong);
+  color: var(--bg);
 }
 
 .theme-switch {
