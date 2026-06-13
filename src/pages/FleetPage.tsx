@@ -1,5 +1,26 @@
-import type { FormEvent } from 'react'
+import type { FormEvent, ReactNode } from 'react'
 import { useEffect, useState } from 'react'
+import {
+  Alert,
+  Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControlLabel,
+  Paper,
+  Stack,
+  Switch,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography,
+} from '@mui/material'
 
 type Vehicle = {
   id: number
@@ -87,6 +108,112 @@ function createEditForm(vehicle: Vehicle): VehicleFormState {
   }
 }
 
+function DetailItem({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+        {label}
+      </Typography>
+      <Typography variant="body1">{value}</Typography>
+    </Paper>
+  )
+}
+
+type VehicleFormProps = {
+  form: VehicleFormState
+  onChange: (field: keyof VehicleFormState, value: string | boolean) => void
+  includeCurrentPosition: boolean
+  submitLabel: string
+  isSaving: boolean
+  onCancel: () => void
+}
+
+function VehicleForm({
+  form,
+  onChange,
+  includeCurrentPosition,
+  submitLabel,
+  isSaving,
+  onCancel,
+}: VehicleFormProps) {
+  return (
+    <Box component="form" onSubmit={(event) => event.preventDefault()}>
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+          gap: 2,
+          pt: 1,
+        }}
+      >
+        <TextField
+          label="Name"
+          value={form.name}
+          onChange={(event) => onChange('name', event.target.value)}
+          fullWidth
+        />
+        <TextField
+          label="Plate"
+          value={form.plate}
+          onChange={(event) => onChange('plate', event.target.value)}
+          fullWidth
+        />
+        <TextField
+          label="External ID"
+          value={form.external_id}
+          onChange={(event) => onChange('external_id', event.target.value)}
+          fullWidth
+        />
+        <TextField
+          label="Status"
+          value={form.status}
+          onChange={(event) => onChange('status', event.target.value)}
+          fullWidth
+        />
+        <TextField
+          label="Speed"
+          value={form.speed}
+          onChange={(event) => onChange('speed', event.target.value)}
+          fullWidth
+        />
+        <TextField
+          label="Heading"
+          value={form.heading}
+          onChange={(event) => onChange('heading', event.target.value)}
+          fullWidth
+        />
+        {includeCurrentPosition ? (
+          <TextField
+            label="Current Position"
+            value={form.current_position}
+            onChange={(event) => onChange('current_position', event.target.value)}
+            fullWidth
+            sx={{ gridColumn: { md: '1 / -1' } }}
+          />
+        ) : null}
+        <FormControlLabel
+          control={
+            <Switch
+              checked={form.is_active}
+              onChange={(event) => onChange('is_active', event.target.checked)}
+            />
+          }
+          label="Active"
+          sx={{ gridColumn: { md: '1 / -1' } }}
+        />
+      </Box>
+      <DialogActions sx={{ px: 0, pt: 3 }}>
+        <Button onClick={onCancel} color="inherit">
+          Cancel
+        </Button>
+        <Button type="submit" variant="contained" disabled={isSaving}>
+          {isSaving ? 'Saving...' : submitLabel}
+        </Button>
+      </DialogActions>
+    </Box>
+  )
+}
+
 function FleetPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -140,6 +267,10 @@ function FleetPage() {
       isMounted = false
     }
   }, [])
+
+  function updateFormField(field: keyof VehicleFormState, value: string | boolean) {
+    setVehicleForm((current) => (current ? { ...current, [field]: value } : current))
+  }
 
   function openViewModal(vehicle: Vehicle) {
     setSelectedVehicle(vehicle)
@@ -298,393 +429,162 @@ function FleetPage() {
 
   return (
     <section className="dashboard-panel fleet-panel" aria-label="Fleet page">
-      <div className="fleet-panel__header">
-        <div>
-          <h1 className="fleet-panel__title">Fleet</h1>
-          <p className="fleet-panel__subtitle">Vehicles returned by the backend API.</p>
-        </div>
-        <button type="button" className="fleet-action fleet-action--edit" onClick={openAddModal}>
-          Add vehicle
-        </button>
-      </div>
+      <Stack spacing={3}>
+        <Stack
+          direction={{ xs: 'column', sm: 'row' }}
+          spacing={2}
+          sx={{
+            justifyContent: 'space-between',
+            alignItems: { xs: 'stretch', sm: 'flex-start' },
+          }}
+        >
+          <Box>
+            <Typography variant="h4" color="text.primary">
+              Fleet
+            </Typography>
+            <Typography variant="body1" color="text.secondary">
+              Vehicles returned by the backend API.
+            </Typography>
+          </Box>
+          <Button variant="contained" onClick={openAddModal}>
+            Add vehicle
+          </Button>
+        </Stack>
 
-      {isLoading ? <p className="fleet-panel__state">Loading fleet...</p> : null}
+        {isLoading ? <Alert severity="info">Loading fleet...</Alert> : null}
+        {error ? <Alert severity="error">Could not load fleet data. {error}</Alert> : null}
+        {actionMessage ? <Alert severity="success">{actionMessage}</Alert> : null}
 
-      {error ? (
-        <p className="fleet-panel__state fleet-panel__state--error">
-          Could not load fleet data. {error}
-        </p>
-      ) : null}
-
-      {actionMessage ? <p className="fleet-panel__state">{actionMessage}</p> : null}
-
-      {!isLoading && !error ? (
-        vehicles.length > 0 ? (
-          <div className="fleet-table-wrap">
-            <table className="fleet-table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Name</th>
-                  <th>Plate</th>
-                  <th>External ID</th>
-                  <th>Active</th>
-                  <th>Status</th>
-                  <th>Position</th>
-                  <th>Speed</th>
-                  <th>Heading</th>
-                  <th>Last Seen</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vehicles.map((vehicle) => (
-                  <tr key={vehicle.id}>
-                    <td>{vehicle.id}</td>
-                    <td>{vehicle.name}</td>
-                    <td>{vehicle.plate}</td>
-                    <td>{vehicle.external_id}</td>
-                    <td>{vehicle.is_active ? 'Yes' : 'No'}</td>
-                    <td>{vehicle.status}</td>
-                    <td>{formatPosition(vehicle.current_position)}</td>
-                    <td>{vehicle.speed}</td>
-                    <td>{vehicle.heading}</td>
-                    <td>{formatLastSeen(vehicle.last_seen_at)}</td>
-                    <td>
-                      <div className="fleet-actions">
-                        <button
-                          type="button"
-                          className="fleet-action fleet-action--view"
-                          onClick={() => openViewModal(vehicle)}
+        {!isLoading && !error ? (
+          vehicles.length > 0 ? (
+            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 4 }}>
+              <Table sx={{ minWidth: 1100 }}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>ID</TableCell>
+                    <TableCell>Name</TableCell>
+                    <TableCell>Plate</TableCell>
+                    <TableCell>External ID</TableCell>
+                    <TableCell>Active</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell>Position</TableCell>
+                    <TableCell>Speed</TableCell>
+                    <TableCell>Heading</TableCell>
+                    <TableCell>Last Seen</TableCell>
+                    <TableCell align="right">Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {vehicles.map((vehicle) => (
+                    <TableRow key={vehicle.id} hover>
+                      <TableCell>{vehicle.id}</TableCell>
+                      <TableCell>{vehicle.name}</TableCell>
+                      <TableCell>{vehicle.plate}</TableCell>
+                      <TableCell>{vehicle.external_id}</TableCell>
+                      <TableCell>{vehicle.is_active ? 'Yes' : 'No'}</TableCell>
+                      <TableCell>{vehicle.status}</TableCell>
+                      <TableCell sx={{ maxWidth: 220 }}>{formatPosition(vehicle.current_position)}</TableCell>
+                      <TableCell>{vehicle.speed}</TableCell>
+                      <TableCell>{vehicle.heading}</TableCell>
+                      <TableCell>{formatLastSeen(vehicle.last_seen_at)}</TableCell>
+                      <TableCell align="right">
+                        <Stack
+                          direction={{ xs: 'column', md: 'row' }}
+                          spacing={1}
+                          sx={{ justifyContent: 'flex-end' }}
                         >
-                          View
-                        </button>
-                        <button
-                          type="button"
-                          className="fleet-action fleet-action--edit"
-                          onClick={() => openEditModal(vehicle)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          className="fleet-action fleet-action--delete"
-                          onClick={() => handleDelete(vehicle)}
-                          disabled={isDeletingId === vehicle.id}
-                        >
-                          {isDeletingId === vehicle.id ? 'Deleting...' : 'Delete'}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="fleet-panel__state">No vehicles were returned by the backend.</p>
-        )
-      ) : null}
+                          <Button size="small" variant="outlined" onClick={() => openViewModal(vehicle)}>
+                            View
+                          </Button>
+                          <Button size="small" variant="outlined" onClick={() => openEditModal(vehicle)}>
+                            Edit
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="error"
+                            onClick={() => handleDelete(vehicle)}
+                            disabled={isDeletingId === vehicle.id}
+                          >
+                            {isDeletingId === vehicle.id ? 'Deleting...' : 'Delete'}
+                          </Button>
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ) : (
+            <Alert severity="info">No vehicles were returned by the backend.</Alert>
+          )
+        ) : null}
+      </Stack>
 
-      {isViewModalOpen && selectedVehicle ? (
-        <div className="fleet-modal-backdrop" role="presentation" onClick={closeModals}>
-          <div
-            className="fleet-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="fleet-view-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="fleet-modal__header">
-              <h2 id="fleet-view-title" className="fleet-modal__title">
-                Vehicle details
-              </h2>
-              <button type="button" className="fleet-modal__close" onClick={closeModals}>
-                Close
-              </button>
-            </div>
-            <dl className="fleet-details">
-              <div>
-                <dt>ID</dt>
-                <dd>{selectedVehicle.id}</dd>
-              </div>
-              <div>
-                <dt>Name</dt>
-                <dd>{selectedVehicle.name}</dd>
-              </div>
-              <div>
-                <dt>Plate</dt>
-                <dd>{selectedVehicle.plate}</dd>
-              </div>
-              <div>
-                <dt>External ID</dt>
-                <dd>{selectedVehicle.external_id}</dd>
-              </div>
-              <div>
-                <dt>Active</dt>
-                <dd>{selectedVehicle.is_active ? 'Yes' : 'No'}</dd>
-              </div>
-              <div>
-                <dt>Status</dt>
-                <dd>{selectedVehicle.status}</dd>
-              </div>
-              <div>
-                <dt>Position</dt>
-                <dd>{formatPosition(selectedVehicle.current_position)}</dd>
-              </div>
-              <div>
-                <dt>Speed</dt>
-                <dd>{selectedVehicle.speed}</dd>
-              </div>
-              <div>
-                <dt>Heading</dt>
-                <dd>{selectedVehicle.heading}</dd>
-              </div>
-              <div>
-                <dt>Last Seen</dt>
-                <dd>{formatLastSeen(selectedVehicle.last_seen_at)}</dd>
-              </div>
-            </dl>
-          </div>
-        </div>
-      ) : null}
+      <Dialog open={isViewModalOpen && !!selectedVehicle} onClose={closeModals} fullWidth maxWidth="md">
+        <DialogTitle>Vehicle details</DialogTitle>
+        <DialogContent dividers>
+          {selectedVehicle ? (
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                gap: 2,
+              }}
+            >
+              <DetailItem label="ID" value={selectedVehicle.id} />
+              <DetailItem label="Name" value={selectedVehicle.name} />
+              <DetailItem label="Plate" value={selectedVehicle.plate} />
+              <DetailItem label="External ID" value={selectedVehicle.external_id} />
+              <DetailItem label="Active" value={selectedVehicle.is_active ? 'Yes' : 'No'} />
+              <DetailItem label="Status" value={selectedVehicle.status} />
+              <DetailItem label="Position" value={formatPosition(selectedVehicle.current_position)} />
+              <DetailItem label="Speed" value={selectedVehicle.speed} />
+              <DetailItem label="Heading" value={selectedVehicle.heading} />
+              <DetailItem label="Last Seen" value={formatLastSeen(selectedVehicle.last_seen_at)} />
+            </Box>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeModals}>Close</Button>
+        </DialogActions>
+      </Dialog>
 
-      {isAddModalOpen && vehicleForm ? (
-        <div className="fleet-modal-backdrop" role="presentation" onClick={closeModals}>
-          <div
-            className="fleet-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="fleet-add-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="fleet-modal__header">
-              <h2 id="fleet-add-title" className="fleet-modal__title">
-                Add vehicle
-              </h2>
-              <button type="button" className="fleet-modal__close" onClick={closeModals}>
-                Close
-              </button>
-            </div>
-            <form className="fleet-form" onSubmit={handleAddSubmit}>
-              <label>
-                <span>Name</span>
-                <input
-                  value={vehicleForm.name}
-                  onChange={(event) =>
-                    setVehicleForm((current) =>
-                      current ? { ...current, name: event.target.value } : current,
-                    )
-                  }
-                />
-              </label>
-              <label>
-                <span>Plate</span>
-                <input
-                  value={vehicleForm.plate}
-                  onChange={(event) =>
-                    setVehicleForm((current) =>
-                      current ? { ...current, plate: event.target.value } : current,
-                    )
-                  }
-                />
-              </label>
-              <label>
-                <span>External ID</span>
-                <input
-                  value={vehicleForm.external_id}
-                  onChange={(event) =>
-                    setVehicleForm((current) =>
-                      current ? { ...current, external_id: event.target.value } : current,
-                    )
-                  }
-                />
-              </label>
-              <label>
-                <span>Status</span>
-                <input
-                  value={vehicleForm.status}
-                  onChange={(event) =>
-                    setVehicleForm((current) =>
-                      current ? { ...current, status: event.target.value } : current,
-                    )
-                  }
-                />
-              </label>
-              <label>
-                <span>Speed</span>
-                <input
-                  value={vehicleForm.speed}
-                  onChange={(event) =>
-                    setVehicleForm((current) =>
-                      current ? { ...current, speed: event.target.value } : current,
-                    )
-                  }
-                />
-              </label>
-              <label>
-                <span>Heading</span>
-                <input
-                  value={vehicleForm.heading}
-                  onChange={(event) =>
-                    setVehicleForm((current) =>
-                      current ? { ...current, heading: event.target.value } : current,
-                    )
-                  }
-                />
-              </label>
-              <label className="fleet-form__checkbox">
-                <input
-                  type="checkbox"
-                  checked={vehicleForm.is_active}
-                  onChange={(event) =>
-                    setVehicleForm((current) =>
-                      current ? { ...current, is_active: event.target.checked } : current,
-                    )
-                  }
-                />
-                <span>Active</span>
-              </label>
-              <div className="fleet-form__actions">
-                <button type="button" className="fleet-action fleet-action--view" onClick={closeModals}>
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="fleet-action fleet-action--edit"
-                  disabled={isSaving}
-                >
-                  {isSaving ? 'Saving...' : 'Create'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      ) : null}
+      <Dialog open={isAddModalOpen && !!vehicleForm} onClose={closeModals} fullWidth maxWidth="md">
+        <DialogTitle>Add vehicle</DialogTitle>
+        <DialogContent dividers>
+          {vehicleForm ? (
+            <Box component="form" onSubmit={handleAddSubmit}>
+              <VehicleForm
+                form={vehicleForm}
+                onChange={updateFormField}
+                includeCurrentPosition={false}
+                submitLabel="Create"
+                isSaving={isSaving}
+                onCancel={closeModals}
+              />
+            </Box>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
-      {isEditModalOpen && selectedVehicle && vehicleForm ? (
-        <div className="fleet-modal-backdrop" role="presentation" onClick={closeModals}>
-          <div
-            className="fleet-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="fleet-edit-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="fleet-modal__header">
-              <h2 id="fleet-edit-title" className="fleet-modal__title">
-                Edit vehicle
-              </h2>
-              <button type="button" className="fleet-modal__close" onClick={closeModals}>
-                Close
-              </button>
-            </div>
-            <form className="fleet-form" onSubmit={handleEditSubmit}>
-              <label>
-                <span>Name</span>
-                <input
-                  value={vehicleForm.name}
-                  onChange={(event) =>
-                    setVehicleForm((current) =>
-                      current ? { ...current, name: event.target.value } : current,
-                    )
-                  }
-                />
-              </label>
-              <label>
-                <span>Plate</span>
-                <input
-                  value={vehicleForm.plate}
-                  onChange={(event) =>
-                    setVehicleForm((current) =>
-                      current ? { ...current, plate: event.target.value } : current,
-                    )
-                  }
-                />
-              </label>
-              <label>
-                <span>External ID</span>
-                <input
-                  value={vehicleForm.external_id}
-                  onChange={(event) =>
-                    setVehicleForm((current) =>
-                      current ? { ...current, external_id: event.target.value } : current,
-                    )
-                  }
-                />
-              </label>
-              <label>
-                <span>Status</span>
-                <input
-                  value={vehicleForm.status}
-                  onChange={(event) =>
-                    setVehicleForm((current) =>
-                      current ? { ...current, status: event.target.value } : current,
-                    )
-                  }
-                />
-              </label>
-              <label>
-                <span>Speed</span>
-                <input
-                  value={vehicleForm.speed}
-                  onChange={(event) =>
-                    setVehicleForm((current) =>
-                      current ? { ...current, speed: event.target.value } : current,
-                    )
-                  }
-                />
-              </label>
-              <label>
-                <span>Heading</span>
-                <input
-                  value={vehicleForm.heading}
-                  onChange={(event) =>
-                    setVehicleForm((current) =>
-                      current ? { ...current, heading: event.target.value } : current,
-                    )
-                  }
-                />
-              </label>
-              <label className="fleet-form__full">
-                <span>Current Position</span>
-                <input
-                  value={vehicleForm.current_position}
-                  onChange={(event) =>
-                    setVehicleForm((current) =>
-                      current ? { ...current, current_position: event.target.value } : current,
-                    )
-                  }
-                />
-              </label>
-              <label className="fleet-form__checkbox">
-                <input
-                  type="checkbox"
-                  checked={vehicleForm.is_active}
-                  onChange={(event) =>
-                    setVehicleForm((current) =>
-                      current ? { ...current, is_active: event.target.checked } : current,
-                    )
-                  }
-                />
-                <span>Active</span>
-              </label>
-              <div className="fleet-form__actions">
-                <button type="button" className="fleet-action fleet-action--view" onClick={closeModals}>
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="fleet-action fleet-action--edit"
-                  disabled={isSaving}
-                >
-                  {isSaving ? 'Saving...' : 'Save'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      ) : null}
+      <Dialog open={isEditModalOpen && !!selectedVehicle && !!vehicleForm} onClose={closeModals} fullWidth maxWidth="md">
+        <DialogTitle>Edit vehicle</DialogTitle>
+        <DialogContent dividers>
+          {vehicleForm ? (
+            <Box component="form" onSubmit={handleEditSubmit}>
+              <VehicleForm
+                form={vehicleForm}
+                onChange={updateFormField}
+                includeCurrentPosition
+                submitLabel="Save"
+                isSaving={isSaving}
+                onCancel={closeModals}
+              />
+            </Box>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </section>
   )
 }
